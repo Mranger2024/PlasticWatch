@@ -51,41 +51,41 @@ export default function Header() {
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-1">
+          <nav className="hidden md:flex items-center space-x-1 mx-6">
             {navigation.main.map((item) => {
               const Icon = item.icon;
               return (
                 <Link
                   key={item.name}
                   href={item.href}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors duration-200 flex items-center space-x-1.5 group"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors duration-200 flex items-center space-x-2 group rounded-md hover:bg-gray-50"
                 >
                   <Icon className="h-4 w-4 text-blue-600 group-hover:scale-110 transition-transform" />
-                  <span>{item.name}</span>
+                  <span className="whitespace-nowrap">{item.name}</span>
                 </Link>
               );
             })}
           </nav>
 
           {/* CTA Buttons */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             <Button 
               asChild 
               variant="ghost" 
-              className="hidden md:flex items-center space-x-1.5 text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+              className="hidden md:flex items-center space-x-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 px-4"
             >
-              <Link href="/dashboard">
+              <Link href="/dashboard" className="flex items-center">
                 <span>Dashboard</span>
               </Link>
             </Button>
             
             <Button 
               asChild 
-              className="bg-gradient-to-r from-blue-600 to-teal-500 hover:from-blue-700 hover:to-teal-600 text-white shadow-md hover:shadow-lg transition-all"
+              className="bg-gradient-to-r from-blue-600 to-teal-500 hover:from-blue-700 hover:to-teal-600 text-white shadow-md hover:shadow-lg transition-all px-4"
             >
               <Link href="/contribute" className="flex items-center space-x-1.5">
-                <span>Contribute</span>
-                <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <span className="hidden md:inline">Contribute</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               </Link>

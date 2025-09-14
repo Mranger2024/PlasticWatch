@@ -19,6 +19,13 @@ interface Contribution {
   brand_suggestion: string | null;
   beach_name: string | null;
   product_image_url: string | null;
+  user_id: string;
+  latitude: number;
+  longitude: number;
+  backside_image_url: string | null;
+  recycling_image_url: string | null;
+  manufacturer_image_url: string | null;
+  notes: string | null;
 }
 
 export default function ContributionsPage() {
@@ -48,10 +55,11 @@ export default function ContributionsPage() {
       if (error) throw error;
 
       // Group by status
-      const grouped = data.reduce((acc, contribution) => {
-        acc[contribution.status] = [...(acc[contribution.status] || []), contribution];
-        return acc;
-      }, { pending: [], classified: [], rejected: [] } as Record<string, Contribution[]>);
+      const grouped = {
+        pending: data.filter((c: Contribution) => c.status === 'pending'),
+        classified: data.filter((c: Contribution) => c.status === 'classified'),
+        rejected: data.filter((c: Contribution) => c.status === 'rejected')
+      };
 
       setContributions(grouped);
     } catch (error) {
@@ -95,7 +103,13 @@ export default function ContributionsPage() {
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <Badge variant={contribution.status === 'classified' ? 'default' : 'secondary'}>
+          <Badge className={`${
+            contribution.status === 'classified' 
+              ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' 
+              : contribution.status === 'rejected'
+                ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
+                : 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
+          }`}>
             {contribution.status}
           </Badge>
           <Button
@@ -150,7 +164,7 @@ export default function ContributionsPage() {
           <TabsTrigger value="pending">
             Pending
             {contributions.pending.length > 0 && (
-              <Badge variant="secondary" className="ml-2">
+              <Badge className="ml-2 bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100">
                 {contributions.pending.length}
               </Badge>
             )}
@@ -158,7 +172,7 @@ export default function ContributionsPage() {
           <TabsTrigger value="classified">
             Classified
             {contributions.classified.length > 0 && (
-              <Badge variant="default" className="ml-2">
+              <Badge className="ml-2 bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100">
                 {contributions.classified.length}
               </Badge>
             )}
@@ -166,7 +180,7 @@ export default function ContributionsPage() {
           <TabsTrigger value="rejected">
             Rejected
             {contributions.rejected.length > 0 && (
-              <Badge variant="destructive" className="ml-2">
+              <Badge className="ml-2 bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100">
                 {contributions.rejected.length}
               </Badge>
             )}

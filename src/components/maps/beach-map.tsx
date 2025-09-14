@@ -34,7 +34,7 @@ const DEFAULT_CENTER = { lat: 20.5937, lng: 78.9629 }; // Center of India
 
 // Custom marker icon
 const createMarkerIcon = (count: number) => {
-  const size = 40 + Math.min(count / 5, 30); // Scale size based on count
+  const size = 50 + Math.min(count / 5, 30); // Scale size based on count
   const color = count > 50 ? '#ef4444' : count > 20 ? '#f59e0b' : '#10b981';
   
   return {

@@ -100,14 +100,36 @@ AlertDialogDescription.displayName =
 
 const AlertDialogAction = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Action>,
-  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action>
->(({ className, ...props }, ref) => (
-  <AlertDialogPrimitive.Action
-    ref={ref}
-    className={cn(buttonVariants(), className)}
-    {...props}
-  />
-))
+  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action> & {
+    variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+    size?: 'default' | 'sm' | 'lg' | 'icon';
+  }
+>(({ className, variant = 'default', size = 'default', ...props }, ref) => {
+  const variantClass = variant === 'default' ? 'bg-primary text-primary-foreground hover:bg-primary/90' :
+                     variant === 'destructive' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' :
+                     variant === 'outline' ? 'border border-input bg-background hover:bg-accent hover:text-accent-foreground' :
+                     variant === 'secondary' ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' :
+                     variant === 'ghost' ? 'hover:bg-accent hover:text-accent-foreground' :
+                     'text-primary underline-offset-4 hover:underline';
+  
+  const sizeClass = size === 'default' ? 'h-10 px-4 py-2' :
+                  size === 'sm' ? 'h-9 rounded-md px-3' :
+                  size === 'lg' ? 'h-11 rounded-md px-8' :
+                  'h-10 w-10';
+  
+  return (
+    <AlertDialogPrimitive.Action
+      ref={ref}
+      className={cn(
+        "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&>svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0",
+        variantClass,
+        sizeClass,
+        className
+      )}
+      {...props}
+    />
+  );
+})
 AlertDialogAction.displayName = AlertDialogPrimitive.Action.displayName
 
 const AlertDialogCancel = React.forwardRef<
@@ -117,7 +139,7 @@ const AlertDialogCancel = React.forwardRef<
   <AlertDialogPrimitive.Cancel
     ref={ref}
     className={cn(
-      buttonVariants({ variant: "outline" }),
+      "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border border-input bg-background px-4 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&>svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0",
       "mt-2 sm:mt-0",
       className
     )}

@@ -135,9 +135,10 @@ export default function ContactPage() {
                     <div className="ml-4">
                       <h3 className="text-sm font-medium text-gray-900">Our Office</h3>
                       <p className="text-sm text-gray-600">
-                        123 Ocean View Drive<br />
-                        San Francisco, CA 94105<br />
-                        United States
+                        Rushikonda Beach Road<br />
+                        Rushikonda, Visakhapatnam<br />
+                        Andhra Pradesh 530045<br />
+                        India
                       </p>
                     </div>
                   </div>
@@ -168,11 +169,11 @@ export default function ContactPage() {
                     <div className="ml-4">
                       <h3 className="text-sm font-medium text-gray-900">Call Us</h3>
                       <p className="text-sm text-gray-600">
-                        <a href="tel:+18005551234" className="text-blue-600 hover:underline">
-                          +1 (800) 555-1234
+                        <a href="tel:+919912345678" className="text-blue-600 hover:underline">
+                          +91 99123 45678
                         </a>
                       </p>
-                      <p className="text-sm text-gray-500 mt-1">Monday to Friday, 9am to 5pm PST</p>
+                      <p className="text-sm text-gray-500 mt-1">Monday to Friday, 9am to 5pm IST</p>
                     </div>
                   </div>
                   
@@ -183,8 +184,9 @@ export default function ContactPage() {
                     <div className="ml-4">
                       <h3 className="text-sm font-medium text-gray-900">Business Hours</h3>
                       <p className="text-sm text-gray-600">
-                        Monday - Friday: 9:00 AM - 5:00 PM PST<br />
-                        Saturday - Sunday: Closed
+                        Monday - Friday: 9:00 AM - 5:00 PM IST<br />
+                        Saturday: 10:00 AM - 2:00 PM IST<br />
+                        Sunday: Closed
                       </p>
                     </div>
                   </div>
@@ -223,15 +225,14 @@ export default function ContactPage() {
         <div className="container mx-auto px-4">
           <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">Find Us</h2>
           <div className="h-96 bg-gray-200 rounded-lg overflow-hidden">
-            {/* Replace with your actual map embed code */}
             <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3153.035074766454!2d-122.40197268468228!3d37.77492957975973!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x80859a6d00690021%3A0x4a501367f076adff!2sSan%20Francisco%2C%20CA%2C%20USA!5e0!3m2!1sen!2suk!4v1620000000000!5m2!1sen!2suk"
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3808.1947013630405!2d83.37568597507928!3d17.75087278352201!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3a395b0b3f5f5e5b%3A0x8f1c8d6a8a0a0a0a!2sRushikonda%20Beach%2C%20Visakhapatnam%2C%20Andhra%20Pradesh!5e0!3m2!1sen!2sin!4v1620000000000!5m2!1sen!2sin"
               width="100%"
               height="100%"
               style={{ border: 0 }}
               allowFullScreen
               loading="lazy"
-              title="Our Location"
+              title="Our Location - Rushikonda Beach, Visakhapatnam"
             ></iframe>
           </div>
         </div>

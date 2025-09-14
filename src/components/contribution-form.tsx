@@ -1,374 +1,378 @@
-
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef } from "react";
+import dynamic from "next/dynamic";
 import { useForm, FormProvider } from "react-hook-form";
-import { getAISettings } from "@/lib/settings";
+import { supabase, uploadFile } from "@/lib/supabase";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form";
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
-import { Camera, Upload, MapPin, Loader2, Wand2, CheckCircle, Sparkles } from "lucide-react";
+import { Camera, Upload, MapPin, Loader2, Check, ArrowLeft, MoveRight, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { suggestDataTags } from "@/ai/flows/suggest-data-tags";
-import { supabase } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
+import { Button } from "./ui/button";
+import Link from 'next/link';
+
+
+const LocationMap = dynamic(
+  () => import('@/components/map/LocationMap'),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+      </div>
+    )
+  }
+);
 
 const contributionSchema = z.object({
   productImage: z.any().refine(file => file, "Product image is required."),
+  backsideImage: z.any().optional(),
   recyclingImage: z.any().optional(),
   manufacturerImage: z.any().optional(),
-  brand: z.string().min(1, "Brand is required."),
-  manufacturer: z.string().min(1, "Manufacturer is required."),
-  plasticType: z.string().optional(),
-  location: z.object({
-    latitude: z.number(),
-    longitude: z.number(),
-  }),
+  brand: z.string().min(2, "Brand name is required."),
+  plasticType: z.string().min(1, "Plastic type is required."),
   beachName: z.string().optional(),
   notes: z.string().optional(),
+  location: z.object({
+    lat: z.number(),
+    lng: z.number()
+  })
 });
 
-const skippedContributionSchema = contributionSchema.extend({
-    brand: z.string().optional(),
-    manufacturer: z.string().optional(),
-});
+type FormData = z.infer<typeof contributionSchema>;
 
-type ContributionValues = z.infer<typeof contributionSchema>;
-
-type ImageState = {
+interface ImageState {
   productImage?: string;
+  backsideImage?: string;
   recyclingImage?: string;
   manufacturerImage?: string;
-};
-
-const steps = [
-  { id: "location", title: "Location", description: "Share where you found it" },
-  { id: "photos", title: "Photos", description: "Capture the plastic waste" },
-  { id: "details", title: "Details", description: "Review AI suggestions" },
-  { id: "submit", title: "Submit", description: "Help us track pollution" },
-];
-
-const dataURItoBlob = (dataURI: string) => {
-  const byteString = atob(dataURI.split(',')[1]);
-  const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
-  const ab = new ArrayBuffer(byteString.length);
-  const ia = new Uint8Array(ab);
-  for (let i = 0; i < byteString.length; i++) {
-    ia[i] = byteString.charCodeAt(i);
-  }
-  return new Blob([ab], { type: mimeString });
-};
+}
 
 export default function ContributionForm() {
+  const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(0);
-  const [images, setImages] = useState<ImageState>({});
-  const [location, setLocation] = useState<{ latitude: number; longitude: number; } | null>(null);
-  const [isLocationLoading, setIsLocationLoading] = useState(false);
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [isAiEnabled, setIsAiEnabled] = useState<boolean | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const { toast } = useToast();
+  const [mapView, setMapView] = useState(false);
+  const [images, setImages] = useState<ImageState>({});
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const fileInputsRef = useRef<{[key: string]: File | null}>({
+    productImage: null,
+    backsideImage: null,
+    recyclingImage: null,
+    manufacturerImage: null
+  });
 
-  const form = useForm<ContributionValues>({
+  const form = useForm<FormData>({
     resolver: zodResolver(contributionSchema),
     defaultValues: {
       brand: "",
-      manufacturer: "",
       plasticType: "",
       beachName: "",
-      notes: ""
-    },
+      notes: "",
+      location: { lat: 0, lng: 0 }
+    }
   });
 
-  const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
-  const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
+  const steps = [
+    { id: "location", title: "Location" },
+    { id: "photos", title: "Photos" },
+    { id: "details", title: "Details" },
+    { id: "submit", title: "Submit" }
+  ];
 
-  const handleLocation = async () => {
-    setIsLocationLoading(true);
-    if (!navigator.geolocation) {
-      toast({ variant: 'destructive', title: 'Geolocation is not supported by your browser.' });
-      setIsLocationLoading(false);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        setLocation({ latitude, longitude });
-        form.setValue("location", { latitude, longitude });
-        toast({ title: "Location captured successfully!" });
-        setIsLocationLoading(false);
-        nextStep();
-      },
-      () => {
-        toast({ variant: 'destructive', title: 'Unable to retrieve your location. Please enable location services.' });
-        setIsLocationLoading(false);
-      }
-    );
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, fieldName: keyof ImageState) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, fieldName: string) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUri = event.target?.result as string;
-        setImages(prev => ({ ...prev, [fieldName]: dataUri }));
-        form.setValue(fieldName as any, dataUri);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    // Store the file object for later submission
+    fileInputsRef.current[fieldName] = file;
+
+    // Update form data with the file
+    form.setValue(fieldName as any, file, { shouldValidate: true });
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (event: ProgressEvent<FileReader>) => {
+      setImages((prev: ImageState) => ({
+        ...prev,
+        [fieldName]: event.target?.result as string
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setLocation({ lat: latitude, lng: longitude });
+          form.setValue('location', { lat: latitude, lng: longitude });
+          toast({
+            title: "Location updated",
+            description: "Your current location has been set.",
+          });
+        },
+        (error) => {
+          toast({
+            title: "Error",
+            description: "Could not get your location. Please try again or select from the map.",
+            variant: "destructive"
+          });
+        }
+      );
     }
   };
-  
-  const runAiSuggestions = useCallback(async () => {
-    if (!images.productImage) {
-      toast({ variant: "destructive", title: "Product image is required to get AI suggestions." });
-      return;
-    }
 
-      // Check if AI is enabled in settings
+  const handleLocationSelect = (lat: number, lng: number) => {
+    setLocation({ lat, lng });
+    form.setValue('location', { lat, lng });
+  };
+
+  const nextStep = () => {
+    if (currentStep < steps.length - 1) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const prevStep = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+    } else if (mapView) {
+      setMapView(false);
+    }
+  };
+
+  const uploadImage = async (file: File): Promise<string> => {
     try {
-      const aiSettings = await getAISettings();
-      setIsAiEnabled(aiSettings?.ai_enabled ?? false);
-      
-      if (!aiSettings?.ai_enabled) {
-        toast({
-          title: "AI Analysis Disabled",
-          description: "AI image analysis is currently disabled in the admin settings.",
-          variant: "default",
-        });
-        return;
-      }
+      const url = await uploadFile(file, 'images');
+      return url;
     } catch (error) {
-      console.error('Error checking AI settings:', error);
+      console.error('Error uploading image:', error);
+      throw new Error('Failed to upload image');
+    }
+  };
+
+  const onSubmit = async (formData: FormData) => {
+    try {
+      setIsSubmitting(true);
+      
+      // Upload images and get their URLs
+      console.log('Form data before upload:', {
+        hasManufacturerImage: !!formData.manufacturerImage,
+        manufacturerImage: formData.manufacturerImage
+      });
+      
+      const uploadedImages = await Promise.all([
+        uploadImage(formData.productImage),
+        formData.backsideImage ? uploadImage(formData.backsideImage) : Promise.resolve(null),
+        formData.recyclingImage ? uploadImage(formData.recyclingImage) : Promise.resolve(null),
+        formData.manufacturerImage ? uploadImage(formData.manufacturerImage) : Promise.resolve(null)
+      ]);
+      
+      console.log('Uploaded images:', uploadedImages);
+
+      // Prepare the submission data
+      const submissionData = {
+        product_image_url: uploadedImages[0],
+        backside_image_url: uploadedImages[1],
+        recycling_image_url: uploadedImages[2],
+        manufacturer_image_url: uploadedImages[3],
+        latitude: formData.location.lat,
+        longitude: formData.location.lng,
+        beach_name: formData.beachName || null,
+        brand: formData.brand,
+        plastic_type: formData.plasticType,
+        notes: formData.notes || null,
+        status: 'pending'
+      };
+
+      // Log the data being sent to Supabase
+      const contributionData = {
+        user_id: (await supabase.auth.getUser()).data.user?.id,
+        product_image_url: submissionData.product_image_url,
+        backside_image_url: submissionData.backside_image_url,
+        recycling_image_url: submissionData.recycling_image_url,
+        manufacturer_image_url: submissionData.manufacturer_image_url,
+        latitude: submissionData.latitude,
+        longitude: submissionData.longitude,
+        beach_name: submissionData.beach_name,
+        brand_suggestion: submissionData.brand,
+        plastic_type_suggestion: submissionData.plastic_type,
+        notes: submissionData.notes,
+        status: 'pending' as const
+      };
+      
+      console.log('Submitting to Supabase:', contributionData);
+      
+      // Insert data into Supabase
+      const { data, error } = await supabase
+        .from('contributions')
+        .insert([contributionData])
+        .select();
+
+      if (error) throw error;
+      
+      console.log('Contribution submitted successfully:', data);
+      setIsSubmitted(true);
+      toast({
+        title: "Success!",
+        description: "Your contribution has been submitted.",
+      });
+      
+    } catch (error) {
+      console.error('Submission error:', error);
       toast({
         title: "Error",
-        description: "Unable to check AI settings. Please try again later.",
-        variant: "destructive",
+        description: "There was an error submitting your contribution. Please try again.",
+        variant: "destructive"
       });
-      return;
-    }
-    setIsAiLoading(true);
-    try {
-        const aiPromise = suggestDataTags({
-            productImageUri: images.productImage,
-            recyclingImageUri: images.recyclingImage,
-            manufacturerDetailsImageUri: images.manufacturerImage,
-            location: location ?? undefined,
-        });
-
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('AI suggestions timed out')), 15000));
-
-        const result = await Promise.race([aiPromise, timeoutPromise]) as any;
-
-        if (result.brand) form.setValue("brand", result.brand);
-        if (result.manufacturer) form.setValue("manufacturer", result.manufacturer);
-        if (result.plasticType) form.setValue("plasticType", result.plasticType);
-
-        toast({
-            title: "AI Suggestions Applied",
-            description: "Please review and adjust the details below.",
-        });
-    } catch (error: any) {
-        console.error("AI suggestion failed:", error);
-        const description = error.message === 'AI suggestions timed out'
-            ? "The AI is taking too long to respond. Please fill in the details manually or try again later."
-            : "Could not get AI suggestions. Please fill in the details manually.";
-        toast({
-            variant: "destructive",
-            title: "AI Suggestion Failed",
-            description: description,
-        });
     } finally {
-        setIsAiLoading(false);
-    }
-  }, [images, location, form, toast]);
-
-
-  useEffect(() => {
-    if (currentStep === 2 && images.productImage && !form.getValues('brand')) {
-      runAiSuggestions();
-    }
-  }, [currentStep, images.productImage, runAiSuggestions, form]);
-
-  const uploadImage = async (dataUri: string): Promise<string | null> => {
-    if (!dataUri) return null;
-    const blob = dataURItoBlob(dataUri);
-    const fileExt = blob.type.split('/')[1];
-    const fileName = `${Date.now()}.${fileExt}`;
-    const filePath = `${fileName}`;
-
-    const { data, error } = await supabase.storage.from('contributions').upload(filePath, blob, {
-      cacheControl: '3600',
-      upsert: false,
-    });
-
-    if (error) {
-      console.error('Error uploading image:', error);
-      return null;
-    }
-
-    const { data: { publicUrl } } = supabase.storage.from('contributions').getPublicUrl(data.path);
-    return publicUrl;
-  };
-  
-  const onSubmit = async (data: ContributionValues, status: 'pending' ) => {
-    setIsSubmitting(true);
-
-    try {
-      const productImagePromise = uploadImage(images.productImage!);
-      const recyclingImagePromise = uploadImage(images.recyclingImage!);
-      const manufacturerImagePromise = uploadImage(images.manufacturerImage!);
-
-      const [product_image_url, recycling_image_url, manufacturer_image_url] = await Promise.all([
-          productImagePromise,
-          recyclingImagePromise,
-          manufacturerImagePromise
-      ]);
-
-      if (!product_image_url) {
-        throw new Error('Product image failed to upload.');
-      }
-
-      const { error: dbError } = await supabase.from('contributions').insert({
-        product_image_url,
-        recycling_image_url,
-        manufacturer_image_url,
-        latitude: data.location?.latitude,
-        longitude: data.location?.longitude,
-        beach_name: data.beachName,
-        brand_suggestion: data.brand,
-        manufacturer_suggestion: data.manufacturer,
-        plastic_type_suggestion: data.plasticType,
-        notes: data.notes,
-        status: status,
-      });
-
-      if (dbError) {
-        throw dbError;
-      }
-
-      setIsSubmitted(true);
-      nextStep();
-
-    } catch (error: any) {
-        console.error("Submission failed:", error.message);
-        toast({
-            variant: "destructive",
-            title: "Submission Failed",
-            description: error.message || "An unexpected error occurred. Please try again.",
-        });
-    } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
   };
-
-  const handleSkip = async () => {
-    const result = await skippedContributionSchema.safeParseAsync(form.getValues());
-    if (!result.success) {
-      toast({
-        variant: 'destructive',
-        title: 'Submission failed',
-        description: 'A product image is still required to skip.',
-      });
-      console.error(result.error);
-      return;
-    }
-    onSubmit(result.data as ContributionValues, 'pending');
-  }
 
   const renderStepContent = () => {
+    if (isSubmitted) {
+      return (
+        <div className="text-center py-12">
+          <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Check className="h-8 w-8 text-teal-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Thank You!</h2>
+          <p className="text-gray-600 mb-6">Your contribution has been submitted successfully.</p>
+          <Button onClick={() => {
+            setCurrentStep(0);
+            setIsSubmitted(false);
+            form.reset();
+            setImages({});
+            setLocation(null);
+          }}>
+            Submit Another
+          </Button>
+        </div>
+      );
+    }
+
     switch (currentStep) {
       case 0:
         return (
-          <div className="text-center">
-            <MapPin className="mx-auto h-12 w-12 text-primary mb-4" />
-            <h3 className="text-2xl font-semibold mb-2">Share Your Location</h3>
-            <p className="text-muted-foreground mb-6">We need your location to map where plastic is found. This helps create accurate pollution hotspots.</p>
-            <Button onClick={handleLocation} disabled={isLocationLoading} size="lg">
-              {isLocationLoading ? <Loader2 className="animate-spin mr-2" /> : <MapPin className="mr-2" />}
-              Get My Location
-            </Button>
+          <div className="space-y-6">
+            <div className="text-center">
+              <div className="w-12 h-12 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <MapPin className="h-6 w-6 text-teal-600" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Where did you find it?</h2>
+              <p className="text-gray-600 mb-6">Help us map plastic pollution by sharing the location</p>
+            </div>
+            
+            <div className="space-y-4">
+              <Button 
+                type="button" 
+                onClick={handleLocation}
+                variant="outline"
+                className="w-full py-6 border-2 border-dashed border-gray-300 hover:border-teal-500 bg-white"
+              >
+                <MapPin className="h-5 w-5 mr-2 text-teal-600" />
+                Use My Current Location
+              </Button>
+              
+              <div className="relative h-64 bg-gray-100 rounded-lg overflow-hidden">
+                <LocationMap 
+                  onLocationSelect={handleLocationSelect} 
+                  initialPosition={location ? [location.lat, location.lng] : undefined} 
+                />
+              </div>
+              
+              {location && (
+                <div className="text-sm text-teal-700 bg-teal-50 p-3 rounded-lg flex items-center">
+                  <Check className="h-4 w-4 mr-2" />
+                  Location selected: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                </div>
+              )}
+            </div>
           </div>
         );
+        
       case 1:
         return (
-          <div className="space-y-6">
-            <ImageUploadField name="productImage" label="Product & Brand" description="Capture a clear photo of the item, focusing on the brand logo." onFileChange={handleFileChange} imagePreview={images.productImage} />
-            <ImageUploadField name="recyclingImage" label="Recycling Info (Optional)" description="Photograph the recycling symbol (usually a triangle with a number)." onFileChange={handleFileChange} imagePreview={images.recyclingImage}/>
-            <ImageUploadField name="manufacturerImage" label="Manufacturer Details (Optional)" description="Find and capture the 'Made by' or 'Manufactured by' text." onFileChange={handleFileChange} imagePreview={images.manufacturerImage}/>
+          <div className="space-y-8">
+            <div className="text-center">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Add Photos</h2>
+              <p className="text-gray-600">Take clear photos of the plastic item</p>
+            </div>
+            
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <ImageUploadField 
+                    name="productImage" 
+                    label="Product Front" 
+                    description="Show the front of the product"
+                    onFileChange={handleFileChange} 
+                    imagePreview={images.productImage} 
+                  />
+                  <ImageUploadField 
+                    name="backsideImage" 
+                    label="Product Back" 
+                    description="Show the back of the product"
+                    onFileChange={handleFileChange} 
+                    imagePreview={images.backsideImage} 
+                    optional
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <ImageUploadField 
+                    name="recyclingImage" 
+                    label="Recycling Info" 
+                    description="Show recycling symbols"
+                    onFileChange={handleFileChange} 
+                    imagePreview={images.recyclingImage} 
+                    optional
+                  />
+                  <ImageUploadField 
+                    name="manufacturerImage" 
+                    label="Manufacturer" 
+                    description="Show manufacturer details"
+                    onFileChange={handleFileChange} 
+                    imagePreview={images.manufacturerImage} 
+                    optional
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         );
+        
       case 2:
         return (
-            <>
-              {isAiLoading && (
-                  <div className="flex items-center justify-center p-4 rounded-md bg-secondary/50 mb-4">
-                      <Loader2 className="animate-spin mr-3 text-primary" />
-                      <p className="text-primary-foreground">Our AI is analyzing your images...</p>
-                  </div>
-              )}
-              <div className="flex items-start p-4 rounded-md bg-accent/10 border border-accent/20 mb-6">
-                  <Wand2 className="h-6 w-6 text-accent mr-4 mt-1"/>
-                  <div>
-                      <h4 className="font-semibold text-accent">AI-Powered Suggestions</h4>
-                      <p className="text-sm text-muted-foreground">We've pre-filled the fields below. Please review and correct them if needed. If you're unsure, you can skip this step.</p>
-                  </div>
-              </div>
-              <div className="relative group">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={runAiSuggestions}
-                  disabled={isAiLoading || !images.productImage || isAiEnabled === false}
-                >
-                  {isAiLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Analyzing...
-                    </>
-                  ) : (
-                    <Sparkles className="mr-2 h-4 w-4" />
-                  )}
-                  Get AI Suggestions
-                </Button>
-                {isAiEnabled === false && (
-                  <div className="absolute z-10 w-64 p-2 mt-1 text-sm text-gray-600 bg-white border rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    AI suggestions are currently disabled in the admin settings.
-                  </div>
-                )}
-              </div>
+          <div className="space-y-6">
+            <div className="text-center">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Add Details</h2>
+              <p className="text-gray-600">Tell us more about this item</p>
+            </div>
+            
+            <div className="space-y-4">
               <FormField
                 control={form.control}
                 name="brand"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Brand</FormLabel>
+                    <FormLabel>Brand Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Coca-Cola" {...field} />
+                      <Input placeholder="e.g., Coca-Cola, Nestlé" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="manufacturer"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Manufacturer</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., The Coca-Cola Company" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              
               <FormField
                 control={form.control}
                 name="plasticType"
@@ -376,149 +380,243 @@ export default function ContributionForm() {
                   <FormItem>
                     <FormLabel>Plastic Type</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., PETE 1" {...field} />
+                      <Input placeholder="e.g., PET, HDPE, PP" {...field} />
                     </FormControl>
-                    <FormDescription>Look for a number inside a triangle.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+              
               <FormField
                 control={form.control}
                 name="beachName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Beach Name (Optional)</FormLabel>
+                    <FormLabel>Beach/Location Name (Optional)</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Marina Beach" {...field} />
+                      <Input placeholder="e.g., Bondi Beach" {...field} />
                     </FormControl>
-                     <FormDescription>If you know the name of the beach, please add it here.</FormDescription>
-                    <FormMessage />
                   </FormItem>
                 )}
               />
-               <FormField
+              
+              <FormField
                 control={form.control}
                 name="notes"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Additional Notes (Optional)</FormLabel>
                     <FormControl>
-                      <Textarea placeholder="Any other observations? e.g., 'Found near a turtle nest'" {...field} />
+                      <Textarea 
+                        placeholder="Any additional details about the item or location..." 
+                        className="min-h-[100px]" 
+                        {...field} 
+                      />
                     </FormControl>
-                    <FormMessage />
                   </FormItem>
                 )}
               />
-            </>
-        );
-      case 3:
-        return (
-            <div className="text-center">
-                <CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-4" />
-                <h3 className="text-2xl font-semibold mb-2">Thank You!</h3>
-                <p className="text-muted-foreground mb-6">Your contribution has been successfully submitted. Together, we are making a difference, one piece of plastic at a time.</p>
-                <Button onClick={() => window.location.reload()} variant="outline">Submit Another Item</Button>
             </div>
+          </div>
         );
+        
       default:
         return null;
     }
   };
 
   return (
-    <Card className="max-w-3xl mx-auto">
-      <CardHeader>
-        <div className="mb-6">
-            <Progress value={(currentStep / (steps.length - 1)) * 100} className="mb-2" />
-            <div className="flex justify-between text-sm text-muted-foreground">
-                {steps.map((step, index) => (
-                    <div key={step.id} className={`text-center ${index === currentStep ? 'font-semibold text-primary' : ''}`}>
-                        <p>{step.title}</p>
-                    </div>
-                ))}
+    <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="p-4 sm:p-6">
+            <div className="flex items-center mb-6">
+                 <Button 
+                  asChild 
+                  className="hover:bg-teal-50 text-teal-700"
+                  variant="ghost"
+                >
+                  <Link href="/" className="flex items-center">
+                    <ArrowLeft className="w-7 h-7 border border-teal-700 rounded-full p-1" />
+                  </Link>
+                </Button>
+                   <h1 className="text-2xl md:text-3xl text-center font-bold text-gray-900 ">Report Plastic Pollution</h1>  
             </div>
+        {/* Progress Steps */}
+        <div className="flex justify-between relative mb-8">
+          <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-200 -z-10">
+            <div 
+              className="h-full bg-teal-600 transition-all duration-300" 
+              style={{ 
+                width: `${(currentStep / (steps.length - 1)) * 100}%` 
+              }} 
+            />
+          </div>
+          {steps.map((step, index) => (
+            <div key={step.id} className="flex flex-col items-center z-10 bg-white">
+              <div 
+                className={cn(
+                  "w-8 h-8 rounded-full flex items-center justify-center mb-2 transition-colors",
+                  currentStep >= index 
+                    ? "bg-teal-600 text-white" 
+                    : "bg-gray-200 text-gray-500"
+                )}
+              >
+                {currentStep > index ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  index + 1
+                )}
+              </div>
+              <span 
+                className={cn(
+                  "text-xs font-medium",
+                  currentStep === index ? "text-teal-700" : "text-gray-500"
+                )}
+              >
+                {step.title}
+              </span>
+            </div>
+          ))}
         </div>
-        <CardTitle className="text-3xl font-bold">{steps[currentStep].title}</CardTitle>
-        <CardDescription>{steps[currentStep].description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-          <FormProvider {...form}>
-            <form onSubmit={form.handleSubmit((data) => onSubmit(data, 'pending'))} className="space-y-6">
-              <div className="py-8">{renderStepContent()}</div>
-              
-              {!isSubmitted && (
-                <div className="flex justify-between items-center pt-6 border-t">
-                  <Button type="button" variant="outline" onClick={prevStep} disabled={currentStep === 0 || isSubmitting}>
-                    Back
+
+        {/* Form Content */}
+        <FormProvider {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            <div className="min-h-[400px]">
+              {renderStepContent()}
+            </div>
+            
+            {!isSubmitted && (
+              <div className="flex justify-between pt-6 mt-8 border-t">
+                <Button
+                  type="button"
+                  onClick={prevStep}
+                  disabled={currentStep === 0 && !mapView}
+                  variant={currentStep === 0 && !mapView ? "ghost" : "outline"}
+                  className={cn(
+                    "px-6",
+                    currentStep === 0 && !mapView && "opacity-0 pointer-events-none"
+                  )}
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back
+                </Button>
+                
+                {currentStep < steps.length - 1 ? (
+                  <Button 
+                    type="button" 
+                    onClick={nextStep}
+                    disabled={currentStep === 0 && !location}
+                    className="px-6 bg-teal-600 hover:bg-teal-700 text-white"
+                  >
+                    Continue
+                    <MoveRight className="h-4 w-4 ml-2" />
                   </Button>
-                  {currentStep < 2 && (
-                    <Button type="button" onClick={nextStep} disabled={(currentStep === 1 && !images.productImage)}>
-                        Next
-                    </Button>
-                  )}
-                  {currentStep === 2 && (
-                    <div className="flex items-center gap-4">
-                      <Button type="button" variant="ghost" onClick={handleSkip} disabled={isSubmitting}>
-                          Skip for now
-                        </Button>
-                      <Button type="submit" disabled={isSubmitting}>
-                          {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : null}
-                          {isSubmitting ? 'Submitting...' : 'Submit Contribution'}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </form>
-          </FormProvider>
-      </CardContent>
-    </Card>
+                ) : (
+                  <Button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className="px-8 bg-teal-600 hover:bg-teal-700 text-white"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      "Submit Contribution"
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
+          </form>
+        </FormProvider>
+      </div>
+    </div>
   );
 }
 
 interface ImageUploadFieldProps {
-    name: keyof ImageState;
-    label: string;
-    description: string;
-    onFileChange: (e: React.ChangeEvent<HTMLInputElement>, fieldName: keyof ImageState) => void;
-    imagePreview?: string;
+  name: string;
+  label: string;
+  description: string;
+  onFileChange: (e: React.ChangeEvent<HTMLInputElement>, fieldName: string) => void;
+  imagePreview?: string;
+  optional?: boolean;
 }
 
-function ImageUploadField({ name, label, description, onFileChange, imagePreview }: ImageUploadFieldProps) {
-    const inputRef = useRef<HTMLInputElement>(null);
-  
-    const openFilePicker = () => {
-      inputRef.current?.click();
-    };
-  
-    return (
-      <FormItem>
-        <FormLabel>{label}</FormLabel>
-        <div className="flex items-center gap-4">
-          <div className="w-40 h-40 border-2 border-dashed rounded-md flex items-center justify-center bg-muted/50">
-            {imagePreview ? (
-              <img src={imagePreview} alt={`${label} preview`} className="w-full h-full object-cover rounded-md" />
-            ) : (
-              <Camera className="h-12 w-12 text-muted-foreground" />
-            )}
-          </div>
-          <div className="flex-1">
-            <FormDescription className="mb-4">{description}</FormDescription>
-            <Input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              ref={inputRef}
-              onChange={(e) => onFileChange(e, name)}
-            />
-            <Button type="button" variant="outline" onClick={openFilePicker}>
-              <Upload className="mr-2 h-4 w-4" />
-              Upload Image
-            </Button>
-          </div>
+function ImageUploadField({ 
+  name, 
+  label, 
+  description, 
+  onFileChange, 
+  imagePreview,
+  optional = false
+}: ImageUploadFieldProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleRemove = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    const event = {
+      target: { files: [] }
+    } as unknown as React.ChangeEvent<HTMLInputElement>;
+    onFileChange(event, name);
+  };
+
+  return (
+    <div 
+      onClick={handleClick}
+      className={cn(
+        "group relative border-2 border-dashed rounded-xl p-4 cursor-pointer transition-all",
+        imagePreview 
+          ? "border-gray-200 hover:border-teal-300" 
+          : "border-gray-300 hover:border-teal-400 bg-gray-50"
+      )}
+    >
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={(e) => onFileChange(e, name)}
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+      />
+      
+      {imagePreview ? (
+        <div className="relative">
+          <img
+            src={imagePreview}
+            alt="Preview"
+            className="w-full h-48 object-cover rounded-lg"
+          />
+          <button
+            type="button"
+            onClick={handleRemove}
+            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
-      </FormItem>
-    );
+      ) : (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="w-12 h-12 bg-teal-100 rounded-full flex items-center justify-center mb-3 group-hover:bg-teal-200 transition-colors">
+            <Camera className="h-6 w-6 text-teal-600" />
+          </div>
+          <h4 className="font-medium text-gray-900 flex items-center">
+            {label}
+            {!optional && <span className="text-red-500 ml-1">*</span>}
+          </h4>
+          <p className="text-sm text-gray-500 mt-1 max-w-xs">{description}</p>
+          <p className="text-xs text-gray-400 mt-2">Click to upload or drag and drop</p>
+        </div>
+      )}
+    </div>
+  );
 }

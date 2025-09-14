@@ -19,8 +19,16 @@ async function getContribution(id: string) {
     return data;
 }
 
-export default async function ReviewPage({ params }: { params: { id: string }}) {
-    const contribution = await getContribution(params.id);
+interface PageProps {
+  params: { id: string };
+  searchParams: { [key: string]: string | string[] | undefined };
+}
+
+export default async function ReviewPage({
+  params,
+}: { params: Promise<{ id: string }> }) {
+    const { id } = await params;
+    const contribution = await getContribution(id);
 
     if (!contribution) {
         notFound();

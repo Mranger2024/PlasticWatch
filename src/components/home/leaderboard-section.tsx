@@ -17,21 +17,21 @@ interface PolluterData {
   lastReported?: string;
 }
 
-function getPollutionBadge(rank: number): { variant: "destructive" | "secondary" | "default", label: string, icon: JSX.Element } {
+function getPollutionBadge(rank: number): { label: string; icon: JSX.Element; className: string } {
   if (rank === 1) return { 
-    variant: "destructive", 
-    label: "Top Polluter",
-    icon: <AlertTriangle className="h-3 w-3 mr-1" />
+    label: "High Impact", 
+    icon: <AlertTriangle className="h-4 w-4" />,
+    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
   };
   if (rank <= 3) return { 
-    variant: "destructive", 
     label: "Major Polluter",
-    icon: <AlertTriangle className="h-3 w-3 mr-1" />
+    icon: <AlertTriangle className="h-3 w-3 mr-1" />,
+    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
   };
   return { 
-    variant: "default", 
-    label: "Moderate",
-    icon: <Info className="h-3 w-3 mr-1" />
+    label: "Medium Impact", 
+    icon: <Info className="h-4 w-4" />,
+    className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
   };
 }
 
@@ -70,8 +70,15 @@ async function getTopPolluters(): Promise<PolluterData[]> {
     return [];
   }
 
+  // Define types for the reduce accumulator
+  type CompanyAccumulator = Record<string, { 
+    items: number; 
+    manufacturer: string; 
+    timestamps: number[] 
+  }>;
+
   // Process data to get counts and timestamps
-  const companyData = data.reduce((acc, { brand, manufacturer, created_at }) => {
+  const companyData = (data as Array<{ brand: string | null; manufacturer: string | null; created_at: string }>).reduce<CompanyAccumulator>((acc, { brand, manufacturer, created_at }) => {
     if (brand) {
       const brandKey = brand.trim();
       if (!acc[brandKey]) {
@@ -85,20 +92,16 @@ async function getTopPolluters(): Promise<PolluterData[]> {
       acc[brandKey].timestamps.push(new Date(created_at).getTime());
     }
     return acc;
-  }, {} as Record<string, { 
-    items: number; 
-    manufacturer: string; 
-    timestamps: number[];
-  }>);
+  }, {});
 
   // Calculate trends (simple: more reports in last 30 days = increasing trend)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
-  return Object.entries(companyData)
+  return (Object.entries(companyData) as [string, { items: number; manufacturer: string; timestamps: number[] }][])
     .map(([company, { items, manufacturer, timestamps }]) => {
       // Simple trend calculation
-      const recentReports = timestamps.filter(t => t > thirtyDaysAgo.getTime()).length;
+      const recentReports = timestamps.filter((t: number) => t > thirtyDaysAgo.getTime()).length;
       const previousPeriod = timestamps.length - recentReports;
       
       let trend: 'up' | 'down' | 'stable' = 'stable';
@@ -309,8 +312,7 @@ export default function LeaderboardSection() {
                         </TableCell>
                         <TableCell className="text-right">
                           <Badge 
-                            variant={badge.variant as any} 
-                            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium"
+                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badge.className}`}
                           >
                             {badge.icon}
                             {badge.label}

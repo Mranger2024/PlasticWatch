@@ -83,17 +83,20 @@ const getUserData = async (): Promise<{ contributions: Contribution[], stats: St
   }
 
   // Calculate beach statistics with proper typing
-  const beachCounts = data.reduce<Record<string, number>>((acc, item) => {
-    const beach = item.beach_name || 'Unknown';
-    acc[beach] = (acc[beach] || 0) + 1;
-    return acc;
-  }, {});
+  const beachCounts = (data as Array<{ beach_name: string | null }>).reduce<Record<string, number>>(
+    (acc: Record<string, number>, item: { beach_name: string | null }) => {
+      const beach = item.beach_name || 'Unknown';
+      acc[beach] = (acc[beach] || 0) + 1;
+      return acc;
+    }, 
+    {}
+  );
 
   const topBeach = Object.entries(beachCounts)
-    .sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+    .sort((a: [string, number], b: [string, number]) => b[1] - a[1])[0]?.[0] || 'N/A';
 
   // Calculate contributions from last 7 days
-  const last7Days = data.filter(item => {
+  const last7Days = (data as Array<{ created_at: string }>).filter((item: { created_at: string }) => {
     const itemDate = new Date(item.created_at);
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
@@ -102,8 +105,8 @@ const getUserData = async (): Promise<{ contributions: Contribution[], stats: St
 
   const stats = {
     total: data.length,
-    classified: data.filter(c => c.status === 'classified').length,
-    pending: data.filter(c => c.status === 'pending' || c.status === 'skipped').length,
+    classified: data.filter((c: { status: string }) => c.status === 'classified').length,
+    pending: data.filter((c: { status: string }) => c.status === 'pending' || c.status === 'skipped').length,
     lastContribution: data.length > 0 ? formatDistanceToNow(new Date(data[0].created_at), { addSuffix: true }) : 'N/A',
     last7Days,
     topBeach
@@ -386,11 +389,11 @@ export default function DashboardPage() {
                               </TableCell>
                               <TableCell className="text-right">
                                 <Badge 
-                                  variant={
-                                    item.status === 'classified' ? 'default' : 
-                                    item.status === 'pending' || item.status === 'skipped' ? 'secondary' : 'destructive'
-                                  }
-                                  className="capitalize"
+                                  className={`capitalize ${
+                                    item.status === 'classified' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 
+                                    item.status === 'pending' || item.status === 'skipped' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' : 
+                                    'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                  }`}
                                 >
                                   {item.status}
                                 </Badge>
@@ -626,11 +629,11 @@ export default function DashboardPage() {
                   <div>
                     <h4 className="text-sm font-medium text-muted-foreground">Status</h4>
                     <Badge 
-                      variant={
-                        selectedContribution.status === 'classified' ? 'default' : 
-                        selectedContribution.status === 'pending' || selectedContribution.status === 'skipped' ? 'secondary' : 'destructive'
-                      }
-                      className="mt-1 capitalize"
+                      className={`capitalize ${
+                        selectedContribution.status === 'classified' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 
+                        selectedContribution.status === 'pending' || selectedContribution.status === 'skipped' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' : 
+                        'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                      }`}
                     >
                       {selectedContribution.status}
                     </Badge>

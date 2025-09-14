@@ -32,8 +32,15 @@ async function getCompanyRankings(): Promise<CompanyRanking[]> {
     throw error;
   }
 
+  // Define types for the company data
+  type CompanyAccumulator = Record<string, { 
+    items: number; 
+    manufacturer: string; 
+    timestamps: number[] 
+  }>;
+
   // Process data to get counts and timestamps
-  const companyData = data.reduce((acc, { brand, manufacturer, created_at }) => {
+  const companyData = (data as Array<{ brand: string | null; manufacturer: string | null; created_at: string }>).reduce<CompanyAccumulator>((acc, { brand, manufacturer, created_at }) => {
     if (brand) {
       const brandKey = brand.trim();
       if (!acc[brandKey]) {
@@ -47,20 +54,16 @@ async function getCompanyRankings(): Promise<CompanyRanking[]> {
       acc[brandKey].timestamps.push(new Date(created_at).getTime());
     }
     return acc;
-  }, {} as Record<string, { 
-    items: number; 
-    manufacturer: string; 
-    timestamps: number[];
-  }>);
+  }, {});
 
   // Calculate trends (simple: more reports in last 30 days = increasing trend)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
-  return Object.entries(companyData)
+  return (Object.entries(companyData) as [string, { items: number; manufacturer: string; timestamps: number[] }][])
     .map(([company, { items, manufacturer, timestamps }]) => {
       // Simple trend calculation based on recent activity
-      const recentCount = timestamps.filter(ts => ts > thirtyDaysAgo.getTime()).length;
+      const recentCount = timestamps.filter((ts: number) => ts > thirtyDaysAgo.getTime()).length;
       const olderCount = timestamps.length - recentCount;
       
       let trend: 'up' | 'down' | 'stable' = 'stable';
@@ -81,28 +84,24 @@ async function getCompanyRankings(): Promise<CompanyRanking[]> {
 
 function getPollutionBadge(rank: number, total: number) {
   if (rank === 1) return { 
-    variant: "destructive" as const, 
     label: "Top Polluter", 
     icon: <AlertTriangle className="h-4 w-4 mr-1" />,
-    color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
   };
   if (rank <= 3) return { 
-    variant: "destructive" as const, 
     label: "High Impact", 
     icon: <AlertTriangle className="h-4 w-4 mr-1" />,
-    color: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
+    className: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
   };
   if (rank <= Math.ceil(total / 3)) return { 
-    variant: "secondary" as const, 
     label: "Medium Impact", 
     icon: <Info className="h-4 w-4 mr-1" />,
-    color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+    className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
   };
   return { 
-    variant: "default" as const, 
     label: "Low Impact", 
     icon: <BarChart2 className="h-4 w-4 mr-1" />,
-    color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+    className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
   };
 }
 
@@ -487,8 +486,7 @@ export default function CompaniesPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <Badge 
-                            variant={badge.variant}
-                            className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${badge.color}`}
+                            className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${badge.className}`}
                           >
                             {badge.icon}
                             {badge.label}

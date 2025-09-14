@@ -34,7 +34,7 @@ async function getGlobalStats() {
             .from('contributions')
             .select('user_id', { count: 'exact', head: true });
             
-        const uniqueCompanies = new Set(companies.map(c => c.brand)).size;
+        const uniqueCompanies = new Set((companies as Array<{brand: string | null}>).map(c => c.brand)).size;
 
         return {
             plastics: totalContributions ?? 0,

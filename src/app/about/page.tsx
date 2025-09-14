@@ -33,7 +33,10 @@ export default function AboutPage() {
             <h2 className="text-3xl font-bold text-gray-900 mb-8 text-center">Our Story</h2>
             <div className="prose prose-lg text-gray-700">
               <p className="mb-6">
-                Founded in 2023, Plastic Watch began as a small initiative by a group of environmental scientists and technologists who were frustrated by the growing plastic pollution crisis. What started as a local beach cleanup project has evolved into a global platform that empowers communities to monitor and reduce plastic waste.
+                Launched in August 2025, Plastic Watch began its journey from the pristine shores of Rushikonda Beach, Visakhapatnam. What started as a local initiative by a group of passionate environmentalists has quickly grown into a movement dedicated to preserving our oceans from plastic pollution.
+              </p>
+              <p className="mb-6">
+                Inspired by the natural beauty of Rushikonda and concerned by the growing plastic waste problem, our team of environmental scientists and technologists came together to create a platform that empowers communities to monitor, report, and reduce plastic waste along our coastlines.
               </p>
               <p className="mb-6">
                 Today, we work with thousands of volunteers, researchers, and organizations worldwide to collect data on plastic pollution, identify pollution hotspots, and hold corporations accountable for their environmental impact.
@@ -97,17 +100,17 @@ export default function AboutPage() {
           <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
             {[
               {
-                name: 'Dr. Sarah Chen',
+                name: 'memberA',
                 role: 'Founder & Lead Scientist',
                 bio: 'Marine biologist with 15+ years of experience in ocean conservation and plastic pollution research.'
               },
               {
-                name: 'James Wilson',
+                name: 'memberB',
                 role: 'CTO',
                 bio: 'Technology leader specializing in data platforms for environmental monitoring and citizen science.'
               },
               {
-                name: 'Maria Garcia',
+                name: 'memberC',
                 role: 'Community Director',
                 bio: 'Environmental activist with expertise in community engagement and volunteer coordination.'
               }

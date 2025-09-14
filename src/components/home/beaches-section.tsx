@@ -47,7 +47,14 @@ async function getAffectedBeaches(): Promise<BeachData[]> {
     return [];
   }
 
-  const beachData = data.reduce((acc, { beach_name, created_at }) => {
+  // Define types for the reduce accumulator
+  type BeachAccumulator = Record<string, { 
+    items: number; 
+    timestamps: number[]; 
+    lastReported: string 
+  }>;
+
+  const beachData = (data as Array<{ beach_name: string | null; created_at: string }>).reduce<BeachAccumulator>((acc, { beach_name, created_at }) => {
     if (beach_name) {
       if (!acc[beach_name]) {
         acc[beach_name] = { 
@@ -65,16 +72,16 @@ async function getAffectedBeaches(): Promise<BeachData[]> {
       }
     }
     return acc;
-  }, {} as Record<string, { items: number; timestamps: number[]; lastReported: string }>);
+  }, {});
 
   // Calculate trends (simple: more reports in last 30 days = increasing trend)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
-  return Object.entries(beachData)
+  return (Object.entries(beachData) as [string, { items: number; timestamps: number[]; lastReported: string }][])
     .map(([name, { items, timestamps, lastReported }]) => {
       // Simple trend calculation
-      const recentReports = timestamps.filter(t => t > thirtyDaysAgo.getTime()).length;
+      const recentReports = timestamps.filter((t: number) => t > thirtyDaysAgo.getTime()).length;
       const previousPeriod = timestamps.length - recentReports;
       
       let trend: 'up' | 'down' | 'stable' = 'stable';

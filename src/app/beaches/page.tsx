@@ -1,11 +1,11 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase/client";
 import { Waves, MapPin, TrendingUp, AlertTriangle, Info } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import Image from 'next/image';
 
 interface BeachData {
   name: string;
@@ -58,7 +58,16 @@ async function getBeachData(): Promise<BeachData[]> {
     return [];
   }
 
-  const beachData = data.reduce((acc, { beach_name, created_at }) => {
+  interface BeachStats {
+    items: number;
+    timestamps: number[];
+    lastReported: string;
+  }
+
+  type BeachAccumulator = Record<string, BeachStats>;
+
+  // Type assertion for the reduce callback
+  const beachData = (data as Array<{ beach_name: string | null; created_at: string }>).reduce<BeachAccumulator>((acc, { beach_name, created_at }) => {
     if (beach_name) {
       if (!acc[beach_name]) {
         acc[beach_name] = { 
@@ -76,16 +85,16 @@ async function getBeachData(): Promise<BeachData[]> {
       }
     }
     return acc;
-  }, {} as Record<string, { items: number; timestamps: number[]; lastReported: string }>);
+  }, {});
 
   // Calculate trends (simple: more reports in last 30 days = increasing trend)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
-  return Object.entries(beachData)
+  return (Object.entries(beachData) as [string, BeachStats][])
     .map(([name, { items, timestamps, lastReported }], index) => {
       // Simple trend calculation
-      const recentReports = timestamps.filter(t => t > thirtyDaysAgo.getTime()).length;
+      const recentReports = timestamps.filter((t: number) => t > thirtyDaysAgo.getTime()).length;
       const previousPeriod = timestamps.length - recentReports;
       
       let trend: 'up' | 'down' | 'stable' = 'stable';
@@ -298,10 +307,13 @@ export default function BeachesPage() {
               >
                 {/* Background Image with Overlay */}
                 <div className="relative h-48">
-                  <img
-                    src={beach.image}
+                  <Image
+                    src={beach.image || ''}
                     alt={beach.name}
                     className="w-full h-full object-cover"
+                    width={400}
+                    height={300}
+                    unoptimized
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
                   <div className="absolute bottom-4 left-4 right-4">
